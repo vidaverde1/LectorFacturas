@@ -10,6 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { ResultsTable } from "@/components/ResultsTable";
 import { CameraCapture } from "@/components/CameraCapture";
 import { downloadExcel } from "@/lib/excel";
+import { extractItems } from "@/lib/extract";
+import type { LineItem } from "@/lib/types";
+
+export type { LineItem };
 
 const schema = z.object({
   file: z
@@ -17,19 +21,11 @@ const schema = z.object({
     .refine((f) => f.size <= 10 * 1024 * 1024, "Máximo 10MB")
     .refine(
       (f) => ["image/jpeg", "image/png", "application/pdf"].includes(f.type),
-      "Solo PDF, JPG o PNG"
+      "Solo JPG o PNG"
     ),
 });
 
 type FormData = z.infer<typeof schema>;
-
-export interface LineItem {
-  codigo: string | null;
-  articulo: string;
-  cantidad: number;
-  precio_sin_iva: number;
-}
-
 type AppState = "idle" | "processing" | "done" | "error";
 
 export default function Home() {
@@ -48,13 +44,9 @@ export default function Home() {
     setState("processing");
     setErrorMsg("");
     setFileName(file.name);
-    const fd = new FormData();
-    fd.append("file", file);
     try {
-      const res = await fetch("/api/process", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al procesar");
-      setItems(data.items);
+      const result = await extractItems(file);
+      setItems(result);
       setState("done");
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Error desconocido");
@@ -87,7 +79,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
 
-      {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 py-4 md:py-5">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <div className="bg-brand-500 rounded-xl p-2">
@@ -103,11 +94,8 @@ export default function Home() {
       <main className="flex-1 px-4 py-6 md:py-10">
         <div className="max-w-3xl mx-auto space-y-5">
 
-          {/* Upload — idle / error */}
           {(state === "idle" || state === "error") && (
             <div className="space-y-4">
-
-              {/* Camera CTA — hero on mobile */}
               <button
                 onClick={() => setShowCamera(true)}
                 className="w-full bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white rounded-2xl p-6 flex flex-col items-center gap-3 transition-colors shadow-sm shadow-brand-200"
@@ -121,14 +109,12 @@ export default function Home() {
                 </div>
               </button>
 
-              {/* Divider */}
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-slate-200" />
-                <span className="text-xs text-slate-400 font-medium">o subí un archivo</span>
+                <span className="text-xs text-slate-400 font-medium">o subí una imagen</span>
                 <div className="flex-1 h-px bg-slate-200" />
               </div>
 
-              {/* Drop zone */}
               <div
                 onDrop={onDrop}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -145,17 +131,14 @@ export default function Home() {
                   <input
                     type="file"
                     className="hidden"
-                    accept=".pdf,.jpg,.jpeg,.png"
+                    accept=".jpg,.jpeg,.png"
                     onChange={onFileChange}
                   />
                 </label>
-                <p className="text-slate-400 text-xs mt-1.5">PDF · JPG · PNG — máx. 10 MB</p>
-                {errors.file && (
-                  <p className="text-red-500 text-xs mt-2">{errors.file.message}</p>
-                )}
+                <p className="text-slate-400 text-xs mt-1.5">JPG · PNG — máx. 10 MB</p>
+                {errors.file && <p className="text-red-500 text-xs mt-2">{errors.file.message}</p>}
               </div>
 
-              {/* Error message */}
               {state === "error" && (
                 <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-600">
                   {errorMsg}
@@ -164,13 +147,10 @@ export default function Home() {
             </div>
           )}
 
-          {/* Processing */}
           {state === "processing" && (
             <div className="bg-white rounded-2xl border border-slate-200 p-12 flex flex-col items-center gap-4 shadow-sm">
-              <div className="relative">
-                <div className="bg-brand-50 rounded-full p-5">
-                  <Loader2 className="h-8 w-8 text-brand-500 animate-spin" />
-                </div>
+              <div className="bg-brand-50 rounded-full p-5">
+                <Loader2 className="h-8 w-8 text-brand-500 animate-spin" />
               </div>
               <div className="text-center">
                 <p className="font-medium text-slate-800">Analizando documento</p>
@@ -179,11 +159,8 @@ export default function Home() {
             </div>
           )}
 
-          {/* Results */}
           {state === "done" && items.length > 0 && (
             <div className="space-y-4">
-
-              {/* Summary bar */}
               <div className="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2 min-w-0">
@@ -210,7 +187,6 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-
               <ResultsTable items={items} />
             </div>
           )}
