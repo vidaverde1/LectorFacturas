@@ -23,8 +23,6 @@ jobs:
 
       - name: Build
         run: npm run build
-        env:
-          NEXT_PUBLIC_GROQ_API_KEY: ${{ secrets.NEXT_PUBLIC_GROQ_API_KEY }}
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4

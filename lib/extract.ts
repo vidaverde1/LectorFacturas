@@ -4,6 +4,7 @@ import Groq from "groq-sdk";
 import type { LineItem } from "./types";
 
 const MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+const STORAGE_KEY = "groq_api_key";
 
 const SYSTEM_PROMPT = `You are a precise data extraction assistant for commercial documents (invoices, purchase orders, delivery notes).
 
@@ -28,10 +29,7 @@ Rules:
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      resolve(dataUrl.split(",")[1]);
-    };
+    reader.onload = () => resolve((reader.result as string).split(",")[1]);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -41,26 +39,34 @@ function parseItems(raw: string): LineItem[] {
   const cleaned = raw.replace(/```json\n?|```/g, "").trim();
   const parsed: unknown = JSON.parse(cleaned);
   if (!Array.isArray(parsed)) throw new Error("Not an array");
-
   return (parsed as Record<string, unknown>[])
     .map((item) => ({
       codigo: item.codigo != null ? String(item.codigo) : null,
       articulo: String(item.articulo ?? ""),
       cantidad: Math.round(Number(item.cantidad) || 0),
-      precio_sin_iva:
-        Math.round(parseFloat(String(item.precio_sin_iva ?? "0")) * 100) / 100,
+      precio_sin_iva: Math.round(parseFloat(String(item.precio_sin_iva ?? "0")) * 100) / 100,
     }))
     .filter((i) => i.articulo.trim() !== "" && i.cantidad > 0);
 }
 
+export function getSavedApiKey(): string {
+  return localStorage.getItem(STORAGE_KEY) ?? "";
+}
+
+export function saveApiKey(key: string) {
+  localStorage.setItem(STORAGE_KEY, key.trim());
+}
+
+export function clearApiKey() {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
 export async function extractItems(file: File): Promise<LineItem[]> {
-  const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
-  if (!apiKey) throw new Error("NEXT_PUBLIC_GROQ_API_KEY no configurada");
+  const apiKey = getSavedApiKey();
+  if (!apiKey) throw new Error("NO_API_KEY");
 
   if (file.type === "application/pdf") {
-    throw new Error(
-      "PDF no soportado en esta versión. Guardá el documento como JPG o PNG e intentá de nuevo."
-    );
+    throw new Error("PDF no soportado. Guardá el documento como JPG o PNG.");
   }
 
   const groq = new Groq({ apiKey, dangerouslyAllowBrowser: true });
@@ -75,19 +81,12 @@ export async function extractItems(file: File): Promise<LineItem[]> {
       {
         role: "user",
         content: [
-          {
-            type: "image_url",
-            image_url: { url: `data:${file.type};base64,${base64}` },
-          },
-          {
-            type: "text",
-            text: "Extrae todos los artículos de este documento comercial.",
-          },
+          { type: "image_url", image_url: { url: `data:${file.type};base64,${base64}` } },
+          { type: "text", text: "Extrae todos los artículos de este documento comercial." },
         ],
       },
     ],
   });
 
-  const raw = completion.choices[0]?.message?.content ?? "[]";
-  return parseItems(raw);
+  return parseItems(completion.choices[0]?.message?.content ?? "[]");
 }
