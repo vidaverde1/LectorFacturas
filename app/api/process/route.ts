@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
 const MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
 
 const SYSTEM_PROMPT = `You are a precise data extraction assistant for commercial documents (invoices, purchase orders, delivery notes).
@@ -49,6 +47,8 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+
+  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
